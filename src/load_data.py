@@ -5,7 +5,7 @@ def load_data(path = "data/european_wholesale_electricity_price_data_hourly.csv"
     df = pd.read_csv(path)
     df.rename(columns={"Datetime (UTC)":"timestamp","Price (EUR/MWhe)":"price_euros_wh"},inplace=True, errors='raise')
     
-    df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%dT%H:%M:%S.%f%Z")
+    df["timestamp"] = pd.to_datetime(df["timestamp"], format="%Y-%m-%d %H:%M:%S")
 
     df = df[df["Country"] == country]
     df = df[(df.timestamp<end) & (df.timestamp>=start)]
