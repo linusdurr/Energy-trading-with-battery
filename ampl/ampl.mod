@@ -4,6 +4,7 @@
 # hours in a day
 set H ordered := {0..23};
 
+############# BATTERY SYSTEM #################
 # ----------- Battery specs -------------
 # nominal energy capacity
 param NEC >= 0 default 100000;
@@ -18,10 +19,7 @@ param eps := 0.01;
 # big M to compute is_charging and is_discharging
 param M := NEC;
 
-
-
 # ----------- Charge/ discharge curve discretization -------------
-
 # number of intervals
 param Nint >= 1, <= 100 default 5;
 # incremental - number of intervals
@@ -37,19 +35,6 @@ param G_d{C} >= -NEC, <= 0 default -NEC/2;
 # max positive change in energy capacity (charge)
 param G_c{C} >=0, <= NEC default NEC/2;
 
-
-
-
-
-# ----------- Price and costs -------------
-# price of electricity per hour
-param p{H};
-# fixed grid cost per hour
-param fgc{H} >= 0 default 0;
-# variable grid cost per hour
-param vgc{H} >= 0 default 0;
-
-
 # ----------- Availability Constraints -------------
 # minimum SOC required 
 param min_SOC{H} >= 0, <= 1 default 0;
@@ -61,10 +46,29 @@ param max_SOC{H} >= 0, <= 1 default 1;
 param CCC{H} >= 0 default 0;
 param fc >=0 default 0;
 
+########### PV SYSTEM #################
+# ----------- PV specs -------------
+# rated power of the PV system
+param PV_rated_power >= 0 default 0;
+
+########### LOAD SYSTEM #################
+# ----------- Load specs -------------
+
+
+
+############# GRID CONNECTION #################
+# ----------- Price and costs -------------
+# price of electricity per hour
+param p{H};
+# fixed grid cost per hour
+param fgc{H} >= 0 default 0;
+# variable grid cost per hour
+param vgc{H} >= 0 default 0;
+
 
 ############################# VARIABLES ##################
 
-
+############# BATTERY SYSTEM #################
 # ----------- Decision variables --------------
 # energy "in" per hour
 var x{H} >= -NEC, <= NEC;
