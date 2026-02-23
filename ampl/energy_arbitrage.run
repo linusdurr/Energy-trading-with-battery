@@ -1,0 +1,9 @@
+reset;
+model energy_arbitrage.mod;
+data energy_arbitrage.dat;
+option solver gurobi;
+solve;
+
+display pv_prod, pv_to_grid, pv_to_load, pv_to_bess, bess_to_grid, bess_to_load, grid_to_load, grid_to_bess;
+
+display profit;
