@@ -100,7 +100,10 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
                         grid_to_load=schedule["grid_to_load"],
                         grid_to_bess=schedule["grid_to_bess"],
                         bess_to_grid=schedule["bess_to_grid"],
-                        bess_to_load=schedule["bess_to_load"])
+                        bess_to_load=schedule["bess_to_load"],
+                        capacity=np.hstack(
+                            (np.array([0]), np.cumsum(schedule["pv_to_bess"] + schedule["grid_to_bess"] - schedule["bess_to_grid"] - schedule["bess_to_load"])[:-1])),
+                        SOC=lambda x: 100 * x.capacity/x.NEC)
     else:
         ## store simulation results 
         df = df.assign(n_cycles=n_cycles_list,
