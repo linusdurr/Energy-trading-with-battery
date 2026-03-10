@@ -9,7 +9,7 @@ import numpy as np
 from amplpy import AMPL, modules
 import datetime 
 
-def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_period=1, forecasting_model = None ):
+def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_period=1, forecasting_model=None, add_pv_and_load=False, deg_cost=None):
     """
     Run a simulation starting from the start-th day of the dataframe.
     For every day of the simulation, a schedule is generated (either based on true prices or prediction) and different 
@@ -40,10 +40,10 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
     eff_list = np.zeros(n_hours)
     NEC_list = np.zeros(n_hours)
     price_forecast_list = np.zeros(n_hours)
-    schedule = np.zeros(n_hours)
-
-
-
+    if add_pv_and_load :
+        schedule = pd.DataFrame(index=df.index, columns=["pv_to_grid", "pv_to_load", "pv_to_bess", "grid_to_load", "grid_to_bess", "bess_to_grid", "bess_to_load"])
+    else :
+        schedule = np.zeros(n_hours)
 
 
     # optimization done for each day :
@@ -64,10 +64,10 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
             prices = df.iloc[day_indices].price_euros_wh.to_numpy()
 
         # get the variable grid cost
-        vgc = df.vgc.iloc[day*24:(day+1)*24].to_numpy()
+        vgc = df.vgc.iloc[day_indices].to_numpy()
 
         # get the fixed grid cost
-        fgc = df.fgc.iloc[day*24:(day+1)*24].to_numpy()
+        fgc = df.fgc.iloc[day_indices].to_numpy()
 
         # store battery state
         n_cycles_list[day_indices] = bat.n_cycles
@@ -76,76 +76,133 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
         price_forecast_list[day_indices] = prices
 
         # get optimized schedule
-        schedule[day_indices] = get_daily_schedule(
-            prices, vgc, fgc, bat, G_c, G_d)
+        if add_pv_and_load:
+            if "pv_prod" not in df.columns or "load_demand" not in df.columns or deg_cost is None :
+                raise ValueError("If add_pv_and_load is True, pv_prod, load_demand and deg_cost should be provided")
+            pv_prod = df.pv_prod.iloc[day_indices].to_numpy()
+            load_demand = df.load_demand.iloc[day_indices].to_numpy()
+            
+            daily_schedule = get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load, pv_prod=pv_prod, load_demand=load_demand, deg_cost=deg_cost)
+            schedule.iloc[day_indices] = daily_schedule
 
-    ## store simulation results 
-    df = df.assign(n_cycles=n_cycles_list,
-                   eff=eff_list, 
-                   NEC=NEC_list,
-                   price_forecast=price_forecast_list,
-                   schedule=schedule,
-                   capacity=np.hstack(
-                       (np.array([0]), np.cumsum(schedule)[:-1])),
-                   SOC=lambda x: 100 * x.capacity/x.NEC,
-                   charge_energy=lambda x: x.schedule.mask(x.schedule < 0, 0), ## energy delivered to the battery
-                   discharge_energy=lambda x: -
-                   x.schedule.mask(x.schedule > 0, 0) * x.eff, ## energy obtained from the battery (taking into account the discharge efficiency)
-                   electricity_revenue=lambda x: x.price_euros_wh * ## net revenue from electricity trading (before grid costs)
-                   (x.discharge_energy - x.charge_energy),
-                   grid_cost=lambda x: x.vgc * ## grid costs
-                   (x.discharge_energy + x.charge_energy) +
-                   x.fgc * (abs(x.schedule) > 10**-5),
-                    variable_grid_cost=lambda x: x.vgc * ## grid costs
-                   (x.discharge_energy + x.charge_energy),
-                   fixed_grid_cost = lambda x: x.fgc * (abs(x.schedule) > 10**-5),
-                   hourly_profit=lambda x: x.electricity_revenue - x.grid_cost ## profits
-                   )
+        else:
+            schedule[day_indices] = get_daily_schedule(
+                prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load)
+
+    if add_pv_and_load :
+        df = df.assign(n_cycles=n_cycles_list,
+                        eff=eff_list,
+                        NEC=NEC_list,
+                        price_forecast=price_forecast_list,
+                        pv_to_grid=schedule["pv_to_grid"],
+                        pv_to_load=schedule["pv_to_load"],
+                        pv_to_bess=schedule["pv_to_bess"],
+                        grid_to_load=schedule["grid_to_load"],
+                        grid_to_bess=schedule["grid_to_bess"],
+                        bess_to_grid=schedule["bess_to_grid"],
+                        bess_to_load=schedule["bess_to_load"])
+    else:
+        ## store simulation results 
+        df = df.assign(n_cycles=n_cycles_list,
+                    eff=eff_list, 
+                    NEC=NEC_list,
+                    price_forecast=price_forecast_list,
+                    schedule=schedule,
+                    capacity=np.hstack(
+                        (np.array([0]), np.cumsum(schedule)[:-1])),
+                    SOC=lambda x: 100 * x.capacity/x.NEC,
+                    charge_energy=lambda x: x.schedule.mask(x.schedule < 0, 0), ## energy delivered to the battery
+                    discharge_energy=lambda x: -
+                    x.schedule.mask(x.schedule > 0, 0) * x.eff, ## energy obtained from the battery (taking into account the discharge efficiency)
+                    electricity_revenue=lambda x: x.price_euros_wh * ## net revenue from electricity trading (before grid costs)
+                    (x.discharge_energy - x.charge_energy),
+                    grid_cost=lambda x: x.vgc * ## grid costs
+                    (x.discharge_energy + x.charge_energy) +
+                    x.fgc * (abs(x.schedule) > 10**-5),
+                        variable_grid_cost=lambda x: x.vgc * ## grid costs
+                    (x.discharge_energy + x.charge_energy),
+                    fixed_grid_cost = lambda x: x.fgc * (abs(x.schedule) > 10**-5),
+                    hourly_profit=lambda x: x.electricity_revenue - x.grid_cost ## profits
+                    )
 
     return df.iloc[(frame_size if forecasted else 0) * 24:]
 
-
-def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d):
+def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, pv_prod=None, load_demand=None, deg_cost=None):
     """
     Obtain schedule given the battery model, prices, vgc and fgc.
     """
 
     ## the arrays have to contain the data for the 24 hours of the day
-    if not (len(prices == 24) and len(vgc) == 24 and len(fgc) == 24) :
+    if not (len(prices) == 24 and len(vgc) == 24 and len(fgc) == 24) :
         raise Exception(
             "The arrays should contain the data for a full day (24 hours)")
 
     ## instantiate AMPL object and load the model
     modules.load()  # load all AMPL modules
-    ampl = AMPL()  
-    ampl.read("ampl/ampl.mod")  
+    ampl = AMPL()
+    if add_pv_and_load :
+        if pv_prod is None or load_demand is None or deg_cost is None :
+            raise ValueError("If add_pv_and_load is True, pv_prod, load_demand and deg_cost should be provided")
 
-    ## set parameters 
-    ampl.get_parameter("vgc").set_values(vgc)
-    ampl.get_parameter("fgc").set_values(fgc)
-    ampl.get_parameter("p").set_values(prices)
-    ampl.get_parameter("eff").set_values([bat.eff])
-    ampl.get_parameter("Nint").set_values([bat.Nint])
-    ampl.get_parameter("max_SOC").set_values([1]*23 + [0])
-    ampl.get_parameter("G_c").set_values(np.array(G_c)*bat.NEC)
-    ampl.get_parameter("G_d").set_values(np.array(G_d)*bat.NEC)
-    ampl.get_parameter("NEC").set_values([bat.NEC])
+        ampl.read("ampl/energy_arbitrage.mod")
 
-    ## solve and get optimization solution
-    ampl.option["solver"] = "gurobi"
-    ampl.solve()
-    daily_schedule = ampl.get_variable('x').get_values().to_pandas()[
-        "x.val"].to_numpy()
-    
+        ## set parameters 
+        ampl.get_parameter("vgc").set_values(vgc)
+        ampl.get_parameter("fgc").set_values(fgc)
+        ampl.get_parameter("p").set_values(prices)
+        ampl.get_parameter("eff").set_values([bat.eff])
+        ampl.get_parameter("Nint").set_values([bat.Nint])
+        ampl.get_parameter("G_c").set_values(np.array(G_c)*bat.NEC)
+        ampl.get_parameter("G_d").set_values(np.array(G_d)*bat.NEC)
+        ampl.get_parameter("BESS_Capacity").set_values([bat.NEC])
+        ampl.get_parameter("pv_prod").set_values(pv_prod)
+        ampl.get_parameter("load_demand").set_values(load_demand)
+        ampl.get_parameter("deg_cost").set_values(deg_cost)
+        
+        ## solve and get optimization solution
+        ampl.option["solver"] = "gurobi"
+        ampl.solve()
 
-    # print(ampl.get_variable('x').get_values().to_pandas()[
-    #     "x.val"].to_numpy())
-    
-    # print(ampl.get_variable('is_charging_or_discharging').get_values().to_pandas()[
-    # "is_charging_or_discharging.val"].to_numpy())
-    # ampl.reset()
+        pv_to_grid = ampl.get_variable('pv_to_grid').get_values().to_pandas()
+        pv_to_load = ampl.get_variable('pv_to_load').get_values().to_pandas()
+        pv_to_bess = ampl.get_variable('pv_to_bess').get_values().to_pandas()
+        grid_to_load = ampl.get_variable('grid_to_load').get_values().to_pandas()
+        grid_to_bess = ampl.get_variable('grid_to_bess').get_values().to_pandas()
+        bess_to_grid = ampl.get_variable('bess_to_grid').get_values().to_pandas()
+        bess_to_load = ampl.get_variable('bess_to_load').get_values().to_pandas()
 
-    ## update battery state
-    bat.n_cycles += abs(daily_schedule).sum()/(2*bat.init_NEC)
+        daily_schedule = pd.concat([pv_to_grid, pv_to_load, pv_to_bess, grid_to_load, grid_to_bess, bess_to_grid, bess_to_load], axis=1)
 
+        ## update battery state
+        bat.n_cycles += (daily_schedule["pv_to_bess.val"].sum() + daily_schedule["grid_to_bess.val"].sum() + daily_schedule["bess_to_grid.val"].sum() + daily_schedule["bess_to_load.val"].sum())/(2*bat.init_NEC)
+    else :
+        ampl.read("ampl/ampl.mod")  
+
+        ## set parameters 
+        ampl.get_parameter("vgc").set_values(vgc)
+        ampl.get_parameter("fgc").set_values(fgc)
+        ampl.get_parameter("p").set_values(prices)
+        ampl.get_parameter("eff").set_values([bat.eff])
+        ampl.get_parameter("Nint").set_values([bat.Nint])
+        ampl.get_parameter("max_SOC").set_values([1]*23 + [0])
+        ampl.get_parameter("G_c").set_values(np.array(G_c)*bat.NEC)
+        ampl.get_parameter("G_d").set_values(np.array(G_d)*bat.NEC)
+        ampl.get_parameter("NEC").set_values([bat.NEC])
+
+        ## solve and get optimization solution
+        ampl.option["solver"] = "gurobi"
+        ampl.solve()
+        daily_schedule = ampl.get_variable('x').get_values().to_pandas()[
+            "x.val"].to_numpy()
+
+        # print(ampl.get_variable('x').get_values().to_pandas()[
+        #     "x.val"].to_numpy())
+        
+        # print(ampl.get_variable('is_charging_or_discharging').get_values().to_pandas()[
+        # "is_charging_or_discharging.val"].to_numpy())
+        # ampl.reset()
+
+        ## update battery state
+        bat.n_cycles += abs(daily_schedule).sum()/(2*bat.init_NEC)
+        
     return daily_schedule

@@ -8,7 +8,7 @@ set T ordered := {0..23}; # 96 values
 ######################### PARAMETERS & VARIABLES #########################
 ################### Battery constrains ###################
 # BESS nominal energy capacity in Wh: Initial maximum capacity of the battery (which is reduced with degradation)
-param BESS_Capacity >= 0, <= 60000 default 0;  
+param BESS_Capacity >= 0 default 0;  
 # initial energy capacity at time t
 param SOC_init {t in T} >= 0, <= BESS_Capacity default 0;
 # efficiency of the battery
