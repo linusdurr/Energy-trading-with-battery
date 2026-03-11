@@ -41,7 +41,7 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
     NEC_list = np.zeros(n_hours)
     price_forecast_list = np.zeros(n_hours)
     if add_pv_and_load :
-        schedule = pd.DataFrame(index=df.index, columns=["pv_to_grid", "pv_to_load", "pv_to_bess", "grid_to_load", "grid_to_bess", "bess_to_grid", "bess_to_load"])
+        schedule = pd.DataFrame(index=df.index, columns=["pv_to_grid", "pv_to_load", "pv_to_bess", "grid_to_load", "grid_to_bess", "bess_to_grid", "bess_to_load", "SOC"])
     else :
         schedule = np.zeros(n_hours)
 
@@ -101,9 +101,9 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
                         grid_to_bess=schedule["grid_to_bess"],
                         bess_to_grid=schedule["bess_to_grid"],
                         bess_to_load=schedule["bess_to_load"],
-                        capacity=np.hstack(
-                            (np.array([0]), np.cumsum(bat.eff*schedule["pv_to_bess"] + bat.eff*schedule["grid_to_bess"] - schedule["bess_to_grid"] - schedule["bess_to_load"])[:-1])),
-                        SOC=lambda x: 100 * x.capacity/x.NEC)
+                        SOC=schedule["SOC"],
+                        capacity=schedule["SOC"]*NEC_list
+        )
     else:
         ## store simulation results 
         df = df.assign(n_cycles=n_cycles_list,
@@ -173,8 +173,9 @@ def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, p
         grid_to_bess = ampl.get_variable('grid_to_bess').get_values().to_pandas()
         bess_to_grid = ampl.get_variable('bess_to_grid').get_values().to_pandas()
         bess_to_load = ampl.get_variable('bess_to_load').get_values().to_pandas()
+        SOC = ampl.get_variable('SOC').get_values().to_pandas()
 
-        daily_schedule = pd.concat([pv_to_grid, pv_to_load, pv_to_bess, grid_to_load, grid_to_bess, bess_to_grid, bess_to_load], axis=1)
+        daily_schedule = pd.concat([pv_to_grid, pv_to_load, pv_to_bess, grid_to_load, grid_to_bess, bess_to_grid, bess_to_load, SOC], axis=1)
 
         ## update battery state
         bat.n_cycles += (bat.eff*daily_schedule["pv_to_bess.val"].sum() + bat.eff*daily_schedule["grid_to_bess.val"].sum() + daily_schedule["bess_to_grid.val"].sum() + daily_schedule["bess_to_load.val"].sum())/(2*bat.init_NEC)

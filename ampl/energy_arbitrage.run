@@ -6,6 +6,6 @@ solve;
 
 option display_width 150;
 option display_precision 4;
-display min_SOC, pv_prod, load_demand, pv_to_grid, pv_to_load, pv_to_bess, bess_to_grid, bess_to_load, grid_to_load, grid_to_bess;
+display min_SOC, pv_prod, load_demand, pv_to_grid, pv_to_load, pv_to_bess, bess_to_grid, bess_to_load, grid_to_load, grid_to_bess, SOC;
 
 display profit;

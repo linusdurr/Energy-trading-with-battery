@@ -59,6 +59,7 @@ param M := BESS_Capacity;
 # ----------- Decision variables --------------
 # Energy charged or discharged at time t, positive for charging and negative for discharging
 var BESS_state{t in T} >= -BESS_Capacity, <= BESS_Capacity;
+var SOC{t in T} >= min_SOC[t], <= max_SOC[t];
 var z{t in T} binary; # boolean indicating if we are charging or discharging (1), or holding (0)
 var y{t in T} binary; # boolean indicating if we are charging (1), or discharging (0)
 
@@ -80,7 +81,7 @@ subject to bess_exporting {t in T} :
     bess_to_grid[t] + bess_to_load[t] <= M * y[t];  
 
 subject to bess_importing {t in T} :
-    grid_to_bess[t] + pv_to_bess[t] <= M * (1-y[t]);
+    eff*grid_to_bess[t] + eff*pv_to_bess[t] <= M * (1-y[t]);
 
 # ----------- SOC Charge/discharge curve discretization -------------
 ######### Convex combintation linearization ##########
@@ -108,7 +109,7 @@ var interval_end_w{I,T} >= 0, <= 1 default 0;
 #------------------- Availability constraints -------------------
 # keep SOC within bounds 
 subject to availability_constraint {t in T}:
-    min_SOC[t] <= SOC_init[t]/BESS_Capacity + sum{t_passed in 0..t} BESS_state[t_passed]/BESS_Capacity <= max_SOC[t];
+    SOC[t] == SOC_init[t]/BESS_Capacity + sum{t_passed in 0..t} BESS_state[t_passed]/BESS_Capacity;
 
 # ------------------- Find discretization parameters of SOC ------------
 subject to find_weights_for_each_interval {t in T} : 
