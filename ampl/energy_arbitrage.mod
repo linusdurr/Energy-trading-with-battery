@@ -159,5 +159,5 @@ maximize profit :
     sum{t in T} (
         (bess_to_grid[t]+pv_to_grid[t]-grid_to_bess[t]-grid_to_load[t]) * p[t] 
         - (bess_to_grid[t]+pv_to_grid[t]+grid_to_bess[t]+grid_to_load[t]) * vgc[t] 
-        - z[t] * fgc[t] - deg_cost*BESS_state[t]
+        - z[t] * fgc[t] - deg_cost*abs(BESS_state[t])/(2*BESS_Capacity)
         );
