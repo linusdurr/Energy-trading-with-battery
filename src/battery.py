@@ -31,13 +31,16 @@ class Battery():
 
     '''
 
-    def __init__(self,SOC_to_CR_function, SOC_to_DR_function,Nint=5, init_NEC = 1000000, init_eff = 0.99, max_cycles=4000):
+    def __init__(self,SOC_to_CR_function, SOC_to_DR_function,Nint=5, init_NEC = 1000000, init_eff = 0.99, max_cycles=4000, price=2000, max_SOC=1, min_SOC=0):
         
         self.SOC_to_CR_function = SOC_to_CR_function
         self.SOC_to_DR_function = SOC_to_DR_function 
         self.max_SOC_change_charge, self.min_SOC_change_discharge = self.get_max_SOC_change(Nint)
         self.Nint = Nint
         self.max_cycles = max_cycles
+        self.price = price
+        self.max_SOC = max_SOC
+        self.min_SOC = min_SOC
 
 
         self.init_eff = init_eff

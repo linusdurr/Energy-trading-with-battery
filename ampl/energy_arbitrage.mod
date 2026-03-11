@@ -10,7 +10,7 @@ set T ordered := {0..23}; # 96 values
 # BESS nominal energy capacity in Wh: Initial maximum capacity of the battery (which is reduced with degradation)
 param BESS_Capacity >= 0 default 0;  
 # initial energy capacity at time t
-param SOC_init {t in T} >= 0, <= BESS_Capacity default 0;
+param SOC_init >= 0, <= 1 default 0;
 # efficiency of the battery
 param eff >0, <=1 default 0.92; #An average efficiency for a lithium-ion battery
 # minimum SOC required, it is a 15% and 85% of the BESS_Capacity to avoid deep discharge and overcharge, which can damage the battery and reduce its lifespan
@@ -109,14 +109,14 @@ var interval_end_w{I,T} >= 0, <= 1 default 0;
 #------------------- Availability constraints -------------------
 # keep SOC within bounds 
 subject to availability_constraint {t in T}:
-    SOC[t] == SOC_init[t]/BESS_Capacity + sum{t_passed in 0..t} BESS_state[t_passed]/BESS_Capacity;
+    SOC[t] == SOC_init + sum{t_passed in 0..t} BESS_state[t_passed]/BESS_Capacity;
 
 # ------------------- Find discretization parameters of SOC ------------
-subject to find_weights_for_each_interval {t in T} : 
-    sum{k in I} (interval_start_w[k,t]*S[k-1]+ interval_end_w[k,t]*S[k]) == SOC_init[t]/BESS_Capacity + sum{t_passed in 0..t-1} BESS_state[t_passed] / BESS_Capacity;
+subject to find_weights_for_each_interval {t in 1..card(T)-1} : 
+    sum{k in I} (interval_start_w[k,t]*S[k-1]+ interval_end_w[k,t]*S[k]) == SOC_init + sum{t_passed in 0..t-1} BESS_state[t_passed]/BESS_Capacity;
 
 subject to find_weights_for_each_interval_0 : 
-    sum{k in I} (interval_start_w[k,0]*S[k-1]+ interval_end_w[k,0]*S[k]) == SOC_init[0]/BESS_Capacity;
+    sum{k in I} (interval_start_w[k,0]*S[k-1]+ interval_end_w[k,0]*S[k]) == SOC_init;
 
 subject to comvex_combination_constraint {k in I, t in T} : 
     interval_start_w[k,t] + interval_end_w[k,t] == in_interval[k,t];

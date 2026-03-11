@@ -9,7 +9,7 @@ import numpy as np
 from amplpy import AMPL, modules
 import datetime 
 
-def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_period=1, forecasting_model=None, add_pv_and_load=False, deg_cost=None):
+def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_period=1, forecasting_model=None, add_pv_and_load=False, time_horizon=24):
     """
     Run a simulation starting from the start-th day of the dataframe.
     For every day of the simulation, a schedule is generated (either based on true prices or prediction) and different 
@@ -47,9 +47,9 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
 
 
     # optimization done for each day :
-    for i, day in enumerate(range((frame_size if forecasted else 0), n_hours//24)):
+    for i, day in enumerate(range((frame_size if forecasted else 0), (n_hours - time_horizon + 24)//24)):
 
-        day_indices = slice(day*24, (day+1)*24)
+        day_indices = slice(day*24, (day+time_horizon//24)*24)
 
         # if using forecasted prices, get new forecast evert update_period iterations :
         if forecasted and (i % update_period == 0):
@@ -77,12 +77,18 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
 
         # get optimized schedule
         if add_pv_and_load:
-            if "pv_prod" not in df.columns or "load_demand" not in df.columns or deg_cost is None :
+            if "pv_prod" not in df.columns or "load_demand" not in df.columns:
                 raise ValueError("If add_pv_and_load is True, pv_prod, load_demand and deg_cost should be provided")
             pv_prod = df.pv_prod.iloc[day_indices].to_numpy()
             load_demand = df.load_demand.iloc[day_indices].to_numpy()
-            
-            daily_schedule = get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load, pv_prod=pv_prod, load_demand=load_demand, deg_cost=deg_cost)
+            deg_cost = bat.price / bat.max_cycles
+
+            if day == (frame_size if forecasted else 0) :
+                SOC_init = bat.min_SOC
+            else :
+                SOC_init = daily_schedule["SOC.val"].iloc[23]
+
+            daily_schedule = get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load, pv_prod=pv_prod, load_demand=load_demand, deg_cost=[deg_cost], SOC_init=SOC_init)
             schedule.iloc[day_indices] = daily_schedule
 
         else:
@@ -130,15 +136,15 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
 
     return df.iloc[(frame_size if forecasted else 0) * 24:]
 
-def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, pv_prod=None, load_demand=None, deg_cost=None):
+def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, pv_prod=None, load_demand=None, deg_cost=None, SOC_init=0):
     """
     Obtain schedule given the battery model, prices, vgc and fgc.
     """
 
     ## the arrays have to contain the data for the 24 hours of the day
-    if not (len(prices) == 24 and len(vgc) == 24 and len(fgc) == 24) :
-        raise Exception(
-            "The arrays should contain the data for a full day (24 hours)")
+    # if not (len(prices) == 24 and len(vgc) == 24 and len(fgc) == 24) :
+    #     raise Exception(
+    #         "The arrays should contain the data for a full day (24 hours)")
 
     ## instantiate AMPL object and load the model
     modules.load()  # load all AMPL modules
@@ -161,6 +167,9 @@ def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, p
         ampl.get_parameter("pv_prod").set_values(pv_prod)
         ampl.get_parameter("load_demand").set_values(load_demand)
         ampl.get_parameter("deg_cost").set_values(deg_cost)
+        ampl.get_parameter("SOC_init").set_values([SOC_init])
+        ampl.get_parameter("max_SOC").set_values([bat.max_SOC]*24)
+        ampl.get_parameter("min_SOC").set_values([bat.min_SOC]*24)
         
         ## solve and get optimization solution
         ampl.option["solver"] = "gurobi"
