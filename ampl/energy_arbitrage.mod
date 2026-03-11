@@ -74,7 +74,7 @@ subject to is_charging_or_discharging_left {t in T} :
 # Convex combintation linearization variables
 
 subject to BESS_state_asignation {t in T} :
-    BESS_state[t] == - bess_to_grid[t] + grid_to_bess[t] - bess_to_load[t] + pv_to_bess[t];
+    BESS_state[t] == - bess_to_grid[t] + eff*grid_to_bess[t] - bess_to_load[t] + eff*pv_to_bess[t];
 
 subject to bess_exporting {t in T} :
     bess_to_grid[t] + bess_to_load[t] <= M * y[t];  
@@ -156,7 +156,7 @@ subject to energy_balance_load {t in T} :
 #
 maximize profit :
     sum{t in T} (
-        (bess_to_grid[t]+pv_to_grid[t]-grid_to_bess[t]*eff-grid_to_load[t]) * p[t] 
-        - (bess_to_grid[t]+pv_to_grid[t]+grid_to_bess[t]*eff+grid_to_load[t]) * vgc[t] 
+        (bess_to_grid[t]+pv_to_grid[t]-grid_to_bess[t]-grid_to_load[t]) * p[t] 
+        - (bess_to_grid[t]+pv_to_grid[t]+grid_to_bess[t]+grid_to_load[t]) * vgc[t] 
         - z[t] * fgc[t] - deg_cost*BESS_state[t]
         );
