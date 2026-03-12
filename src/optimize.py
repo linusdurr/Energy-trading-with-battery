@@ -88,8 +88,13 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
             else :
                 SOC_init = daily_schedule["SOC.val"].iloc[23]
 
-            daily_schedule = get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load, pv_prod=pv_prod, load_demand=load_demand, deg_cost=[deg_cost], SOC_init=SOC_init)
-            schedule.iloc[day_indices] = daily_schedule
+            daily_schedule = get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=add_pv_and_load, pv_prod=pv_prod, load_demand=load_demand, deg_cost=[deg_cost], SOC_init=SOC_init, time_horizon=time_horizon)
+            if day == (n_hours - time_horizon + 24)//24 - 1:
+                schedule.iloc[day_indices] = daily_schedule
+            else:
+                schedule.iloc[slice(day*24, (day+1)*24)] = daily_schedule.iloc[:24, :]
+
+            
 
         else:
             schedule[day_indices] = get_daily_schedule(
@@ -136,7 +141,7 @@ def run_simulation(bat, df, start, end, forecasted=True, frame_size=14, update_p
 
     return df.iloc[(frame_size if forecasted else 0) * 24:]
 
-def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, pv_prod=None, load_demand=None, deg_cost=None, SOC_init=0):
+def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, pv_prod=None, load_demand=None, deg_cost=None, SOC_init=0, time_horizon=24):
     """
     Obtain schedule given the battery model, prices, vgc and fgc.
     """
@@ -156,6 +161,7 @@ def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, p
         ampl.read("ampl/energy_arbitrage.mod")
 
         ## set parameters 
+        ampl.get_parameter("time_horizon").set_values([time_horizon])
         ampl.get_parameter("vgc").set_values(vgc)
         ampl.get_parameter("fgc").set_values(fgc)
         ampl.get_parameter("p").set_values(prices)
@@ -168,9 +174,9 @@ def get_daily_schedule(prices, vgc, fgc, bat, G_c, G_d, add_pv_and_load=False, p
         ampl.get_parameter("load_demand").set_values(load_demand)
         ampl.get_parameter("deg_cost").set_values(deg_cost)
         ampl.get_parameter("SOC_init").set_values([SOC_init])
-        ampl.get_parameter("max_SOC").set_values([bat.max_SOC]*24)
-        ampl.get_parameter("min_SOC").set_values([bat.min_SOC]*24)
-        
+        ampl.get_parameter("max_SOC").set_values([bat.max_SOC]*time_horizon)
+        ampl.get_parameter("min_SOC").set_values([bat.min_SOC]*time_horizon)
+
         ## solve and get optimization solution
         ampl.option["solver"] = "gurobi"
         ampl.solve()

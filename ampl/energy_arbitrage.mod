@@ -1,7 +1,8 @@
 ################### SETS ###################
 
 # Time intervals of 15 minutes in a day
-set T ordered := {0..23}; # 96 values 
+param time_horizon >= 0 default 24;
+set T ordered := {0..time_horizon-1}; # 96 values 
 
 
 
