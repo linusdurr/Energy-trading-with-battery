@@ -225,7 +225,7 @@ def display_schedule(df_to_show, name = "", start=None, end=None, add_pv_and_loa
 
             fig.show()
             fig_name = fig.layout.title.text.split("<b>")[1].split("</b>")[0].lower().replace(" ", "_")
-            fig.write_html(f"out/with_pv_and_load/{fig_name}.html")
+            fig.write_html(f"out/with_pv_and_load/{fig_name}_{name}.html")
     
     else:
         fig = make_subplots(specs=[[{"secondary_y": True}]])
